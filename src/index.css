@@ -1,0 +1,245 @@
+@import "tailwindcss";
+
+
+@theme {
+  /* Background Colors */
+  --color-calc-bg: #1a1528;           /* Main app background - dark purple */
+  --color-calc-calc-bg: #2d2640;      /* Calculator container background */
+  --color-calc-display-bg: #221d35;   /* Display area background */
+  
+  /* Button Colors */
+  --color-calc-btn-default: #3d3550;  /* Default button background */
+  --color-calc-btn-hover: #4a4260;    /* Button hover state */
+  --color-calc-btn-active: #56496d;   /* Button active/pressed state */
+  
+  /* Operator Button Colors */
+  --color-calc-btn-operator: #403a58;       /* Operator button background */
+  --color-calc-btn-operator-hover: #4d4668; /* Operator button hover */
+  
+  /* Equals Button Colors (Accent) */
+  --color-calc-btn-equals: #7c3aed;         /* Equals button (vibrant purple) */
+  --color-calc-btn-equals-hover: #8b5cf6;   /* Equals button hover (brighter) */
+  
+  /* Text Colors */
+  --color-calc-text: #f3e8ff;              /* Primary text (light purple-white) */
+  --color-calc-text-secondary: #c4b5fd;     /* Secondary text (light purple) */
+  
+  /* Border Colors */
+  --color-calc-border: #4a4260;             /* Default border color */
+  --color-calc-border-light: #56496d;       /* Lighter border variant */
+  
+  /* Segoe UI Font Family */
+  --font-family-segoe: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* Global Root Styles (Non-theme properties) */
+:root {
+  /* Font settings */
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Prevent font scaling in landscape on mobile devices */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Global styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family-segoe);
+}
+
+/* Utility classes */
+.user-select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Tap highlight prevention for mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scroll for all browsers */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Animation keyframes */
+@keyframes fadeInTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-60px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* History item animation classes */
+.history-item-new {
+  animation: fadeInTop 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.history-item-slide {
+  animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* History item hover and active effects */
+.history-item {
+  transition: all 0.3s ease;
+}
+
+.history-item:hover {
+  transform: translateX(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.history-item:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+/* Custom scrollbar styling for history panel */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 8px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: rgba(196, 181, 253, 0.3);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(196, 181, 253, 0.5);
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .text-5xl {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
+  }
+  
+  .h-14 {
+    height: 3rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 641px) and (max-width: 768px) {
+  .text-5xl {
+    font-size: 3rem;
+    line-height: 1;
+  }
+  
+  .h-14 {
+    height: 3.5rem;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .h-14 {
+    min-height: 44px; /* iOS recommended touch target */
+  }
+}
+
+/* Focus visible enhancement */
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px rgba(59, 130, 246, 0.3);
+}
+
+/* Display error states */
+.display-error {
+  color: #f87171 !important;
+}
+
+/* Error state for calculator */
+.error-state .display-error {
+  color: #f87171;
+}
+
+/* Smooth transitions */
+button {
+  transition-property: background-color, transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Loading state (for future use) */
+.calculator-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Accessibility - High Contrast Mode */
+@media (prefers-contrast: high) {
+  button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Accessibility - Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .history-item {
+    animation: none !important;
+  }
+}
