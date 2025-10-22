@@ -1,8 +1,4 @@
-/**
- * History Panel Component
- */
-
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import { useResponsive } from '../hooks/useResponsive';
 
 const ClockIcon = () => (

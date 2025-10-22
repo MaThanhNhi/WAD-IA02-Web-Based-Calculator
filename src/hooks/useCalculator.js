@@ -265,47 +265,59 @@ export const useCalculator = () => {
     
     // Update LAYER 1 (Main Display) with intermediate result
     setCurrentInput(formattedResult);
-    setWaitingForNewValue(true);
-  }, [isError, currentInput, clear, formatResult, lastFunctionInput, pendingOperator, getOperatorSymbol, expressionParts, accumulator]);
-  
-  const percentage = useCallback(() => {
+    setWaitingForNewValue(true);  }, [isError, currentInput, clear, formatResult, lastFunctionInput, pendingOperator, getOperatorSymbol, expressionParts, accumulator]);
+    const percentage = useCallback(() => {
     if (isError) {
       return;
     }
     
     const currentValue = parseFloat(currentInput);
     let percentValue;
-    let displayValue;
+    let formattedResult;      
+    if (pendingOperator === null) {
+      percentValue = accumulator * (currentValue / 100);
+      formattedResult = formatResult(percentValue);
+
+      setCalculationHistory('');
+      setCurrentInput(formattedResult);
+      setWaitingForNewValue(true);
+      return;
+    }
     
     if (pendingOperator === 'add' || pendingOperator === 'subtract') {
-      // Context-dependent: percentage of accumulator
+      // Addition/Subtraction: Calculate percentage of the base number (accumulator)
+      // Formula: A + B% → A + (A * B / 100)
+      //          A - B% → A - (A * B / 100)
       percentValue = accumulator * (currentValue / 100);
-      displayValue = percentValue.toString();
+      formattedResult = formatResult(percentValue);
       
       // Update LAYER 2 (Expression Display) to show calculated percentage value
       const operatorSymbol = getOperatorSymbol(pendingOperator);
       const baseExpression = expressionParts.length > 0 ? expressionParts.join(' ') : accumulator.toString();
-      setCalculationHistory(`${baseExpression} ${operatorSymbol} ${percentValue}`);
+      setCalculationHistory(`${baseExpression} ${operatorSymbol} ${formattedResult}`);
     } else if (pendingOperator === 'multiply' || pendingOperator === 'divide') {
-      // For multiply/divide: use the raw percentage value (currentValue / 100)
+      // Multiplication/Division: Convert B to decimal (B / 100)
+      // Formula: A × B% → A × (B / 100)
+      //          A ÷ B% → A ÷ (B / 100)
       percentValue = currentValue / 100;
-      displayValue = percentValue.toString();
+      formattedResult = formatResult(percentValue);
       
       // Update LAYER 2 (Expression Display)
       const operatorSymbol = getOperatorSymbol(pendingOperator);
       const baseExpression = expressionParts.length > 0 ? expressionParts.join(' ') : accumulator.toString();
-      setCalculationHistory(`${baseExpression} ${operatorSymbol} ${percentValue}`);
-    } else {
-      // Standard: convert to decimal (no pending operator)
-      percentValue = currentValue / 100;
-      displayValue = percentValue.toString();
-      // LAYER 2 remains unchanged (no expression to build)
+      setCalculationHistory(`${baseExpression} ${operatorSymbol} ${formattedResult}`);
     }
     
     // Update LAYER 1 (Main Display) with calculated percentage result
-    setCurrentInput(displayValue);
-    setWaitingForNewValue(true);
-  }, [isError, currentInput, pendingOperator, accumulator, expressionParts, getOperatorSymbol]);  
+    setCurrentInput(formattedResult);
+    
+    // CRITICAL: Set waitingForNewValue to FALSE so that when next operator is pressed,
+    // the pending calculation will execute (enabling chained operations like 72 - 20% + 5%)
+    setWaitingForNewValue(false);
+    
+    // Clear function input since percentage replaces the current input
+    setLastFunctionInput(null);
+  }, [isError, currentInput, pendingOperator, accumulator, expressionParts, getOperatorSymbol, formatResult]);
   
   const squareRoot = useCallback(() => {
     if (isError) {
@@ -497,7 +509,6 @@ export const useCalculator = () => {
       return;
     }
     
-    const currentValue = parseFloat(currentInput);
       // Handle case: just a single number followed by equals (e.g., "5 =")
     if (pendingOperator === null && !calculationHistory.includes('=')) {
       // CRITICAL: Use original string input to preserve exact value

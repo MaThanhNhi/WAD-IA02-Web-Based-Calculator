@@ -1,7 +1,3 @@
-/**
- * Keyboard support hook for calculator
- */
-
 import { useEffect } from 'react';
 
 export const useKeyboard = (calculator) => {
