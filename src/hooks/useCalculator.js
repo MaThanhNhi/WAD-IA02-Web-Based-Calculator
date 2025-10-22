@@ -16,10 +16,13 @@ export const useCalculator = () => {
   const [lastOperation, setLastOperation] = useState(null);
   const [lastOperand, setLastOperand] = useState(null);
   const [isError, setIsError] = useState(false);
-  
-  // Expression building state - tracks function notation for nested operations
+    // Expression building state - tracks function notation for nested operations
   const [expressionParts, setExpressionParts] = useState([]);
   const [lastFunctionInput, setLastFunctionInput] = useState(null);
+  
+  // NEW STATE: Track the result of the previous function operation
+  // This is needed for saving to history when a new function is called
+  const [previousFunctionResult, setPreviousFunctionResult] = useState(null);
 
   useEffect(() => {
     try {
@@ -139,7 +142,6 @@ export const useCalculator = () => {
       return newHistory.slice(0, MAX_HISTORY_ITEMS);
     });
   }, []);
-
   // Calculator operations
   const clear = useCallback(() => {
     setAccumulator(0);
@@ -152,6 +154,7 @@ export const useCalculator = () => {
     setIsError(false);
     setExpressionParts([]);
     setLastFunctionInput(null);
+    setPreviousFunctionResult(null);
   }, []);
 
   const clearEntry = useCallback(() => {
@@ -177,23 +180,27 @@ export const useCalculator = () => {
     }
     
     // If we just completed a calculation (showing result with "=" in LAYER 2),
-    // start fresh with new number
+    // start new input BUT preserve accumulator and operation chain for percentage
     if (calculationHistory.includes('=')) {
       setCalculationHistory('');
       setExpressionParts([]);
-      setAccumulator(0);
       setPendingOperator(null);
-      setLastOperation(null);
-      setLastOperand(null);
       setCurrentInput(digit);
       setWaitingForNewValue(false);
+      setPreviousFunctionResult(null);
       return;
     }
+    
+    // CRITICAL FIX: When user types after a function operation,
+    // DO NOT clear LAYER 2 (calculationHistory) - keep function expression visible
+    // It will only be saved to history when the next function/operator is pressed
     
     // Update LAYER 1 (Main Display) as user types
     if (waitingForNewValue) {
       setCurrentInput(digit);
       setWaitingForNewValue(false);
+      // DO NOT clear calculationHistory here - LAYER 2 stays visible
+      // DO NOT clear lastFunctionInput here
     } else {
       if (currentInput === '0') {
         setCurrentInput(digit);
@@ -204,35 +211,36 @@ export const useCalculator = () => {
         setCurrentInput(prev => prev + digit);
       }
     }
-  }, [isError, waitingForNewValue, currentInput, calculationHistory, clear]);  const inputDecimal = useCallback(() => {
+  }, [isError, waitingForNewValue, currentInput, calculationHistory, clear]);  
+  
+  const inputDecimal = useCallback(() => {
     if (isError) {
       clear();
     }
     
     // If we just completed a calculation (showing result with "=" in history),
-    // start fresh with "0."
+    // start fresh with "0." BUT preserve accumulator and operation chain
     if (calculationHistory.includes('=')) {
       setCalculationHistory('');
       setExpressionParts([]);
-      setAccumulator(0);
       setPendingOperator(null);
-      setLastOperation(null);
-      setLastOperand(null);
       setCurrentInput('0.');
       setWaitingForNewValue(false);
+      setPreviousFunctionResult(null);
       return;
     }
-    
+
     // Update LAYER 1 (Main Display) with decimal point
     if (waitingForNewValue) {
       setCurrentInput('0.');
       setWaitingForNewValue(false);
+      // DO NOT clear calculationHistory here - LAYER 2 stays visible
+      // DO NOT clear lastFunctionInput here
     } else if (!currentInput.includes('.')) {
       setCurrentInput(prev => prev + '.');
     }
-  }, [isError, waitingForNewValue, currentInput, calculationHistory, clear]);  
-  
-  const negate = useCallback(() => {
+  }, [isError, waitingForNewValue, currentInput, calculationHistory, clear]);
+    const negate = useCallback(() => {
     if (isError) {
       clear();
     }
@@ -241,14 +249,19 @@ export const useCalculator = () => {
     const result = -value;
     const formattedResult = formatResult(result);
     
-    // Build the negate expression wrapper
-    // CRITICAL: Use currentInput (original string) to preserve exact value, not value.toString()
-    // Use lastFunctionInput if available (for chained functions), otherwise use original input string
-    const innerExpression = lastFunctionInput || currentInput;
-    const functionExpression = `negate(${innerExpression})`;
+    // CRITICAL: If there's a function expression in LAYER 2 and user has typed new number,
+    // save the previous calculation to LAYER 3 before replacing
+    if (calculationHistory && !calculationHistory.includes('=') && pendingOperator === null && !waitingForNewValue && previousFunctionResult !== null) {
+      const expression = `${calculationHistory} =`;
+      addToHistory(expression, previousFunctionResult);
+    }
     
-    // Store function expression for preservation in Layer 2 and Layer 3
+    // Build the new function expression using current input
+    const functionExpression = `negate(${currentInput})`;
+    
+    // Store function expression and result for next operation
     setLastFunctionInput(functionExpression);
+    setPreviousFunctionResult(formattedResult);
     
     // Update LAYER 2 (Expression Display) with function notation
     if (pendingOperator !== null) {
@@ -265,29 +278,32 @@ export const useCalculator = () => {
     
     // Update LAYER 1 (Main Display) with intermediate result
     setCurrentInput(formattedResult);
-    setWaitingForNewValue(true);  }, [isError, currentInput, clear, formatResult, lastFunctionInput, pendingOperator, getOperatorSymbol, expressionParts, accumulator]);
-    const percentage = useCallback(() => {
+    setWaitingForNewValue(true);
+  }, [isError, currentInput, clear, formatResult, pendingOperator, getOperatorSymbol, expressionParts, accumulator, calculationHistory, waitingForNewValue, previousFunctionResult, addToHistory]);
+    
+  const percentage = useCallback(() => {
     if (isError) {
       return;
     }
     
     const currentValue = parseFloat(currentInput);
     let percentValue;
-    let formattedResult;      
+    let formattedResult;
+
     if (pendingOperator === null) {
       percentValue = accumulator * (currentValue / 100);
       formattedResult = formatResult(percentValue);
 
-      setCalculationHistory('');
+      setAccumulator(parseFloat(formattedResult));
+    
       setCurrentInput(formattedResult);
+      setCalculationHistory(formattedResult); 
+      
       setWaitingForNewValue(true);
       return;
     }
     
     if (pendingOperator === 'add' || pendingOperator === 'subtract') {
-      // Addition/Subtraction: Calculate percentage of the base number (accumulator)
-      // Formula: A + B% → A + (A * B / 100)
-      //          A - B% → A - (A * B / 100)
       percentValue = accumulator * (currentValue / 100);
       formattedResult = formatResult(percentValue);
       
@@ -296,29 +312,19 @@ export const useCalculator = () => {
       const baseExpression = expressionParts.length > 0 ? expressionParts.join(' ') : accumulator.toString();
       setCalculationHistory(`${baseExpression} ${operatorSymbol} ${formattedResult}`);
     } else if (pendingOperator === 'multiply' || pendingOperator === 'divide') {
-      // Multiplication/Division: Convert B to decimal (B / 100)
-      // Formula: A × B% → A × (B / 100)
-      //          A ÷ B% → A ÷ (B / 100)
       percentValue = currentValue / 100;
       formattedResult = formatResult(percentValue);
       
-      // Update LAYER 2 (Expression Display)
       const operatorSymbol = getOperatorSymbol(pendingOperator);
       const baseExpression = expressionParts.length > 0 ? expressionParts.join(' ') : accumulator.toString();
       setCalculationHistory(`${baseExpression} ${operatorSymbol} ${formattedResult}`);
     }
-    
-    // Update LAYER 1 (Main Display) with calculated percentage result
-    setCurrentInput(formattedResult);
-    
-    // CRITICAL: Set waitingForNewValue to FALSE so that when next operator is pressed,
-    // the pending calculation will execute (enabling chained operations like 72 - 20% + 5%)
+      setCurrentInput(formattedResult);
     setWaitingForNewValue(false);
-    
-    // Clear function input since percentage replaces the current input
     setLastFunctionInput(null);
+    setPreviousFunctionResult(null);
   }, [isError, currentInput, pendingOperator, accumulator, expressionParts, getOperatorSymbol, formatResult]);
-  
+    
   const squareRoot = useCallback(() => {
     if (isError) {
       clear();
@@ -335,14 +341,19 @@ export const useCalculator = () => {
     const result = Math.sqrt(value);
     const formattedResult = formatResult(result);
     
-    // CRITICAL: Use currentInput (original string) to preserve exact value
-    // Use lastFunctionInput if available to preserve notation chain
-    // Example: sqr(9) → √ becomes √(sqr(9)), not √(81)
-    const innerExpression = lastFunctionInput || currentInput;
-    const functionExpression = `√(${innerExpression})`;
+    // CRITICAL: If there's a function expression in LAYER 2 and user has typed new number,
+    // save the previous calculation to LAYER 3 before replacing
+    if (calculationHistory && !calculationHistory.includes('=') && pendingOperator === null && !waitingForNewValue && previousFunctionResult !== null) {
+      const expression = `${calculationHistory} =`;
+      addToHistory(expression, previousFunctionResult);
+    }
     
-    // Store function expression for nested operation support (e.g., negate(√(9)))
+    // Build the new function expression using current input
+    const functionExpression = `√(${currentInput})`;
+    
+    // Store function expression and result for next operation
     setLastFunctionInput(functionExpression);
+    setPreviousFunctionResult(formattedResult);
     
     // Update LAYER 2 (Expression Display) with function notation
     if (pendingOperator !== null) {
@@ -353,15 +364,15 @@ export const useCalculator = () => {
         : accumulator.toString();
       setCalculationHistory(`${baseExpression} ${operatorSymbol} ${functionExpression}`);
     } else {
-      // Standalone function: "√(9)" or chained: "√(sqr(9))"
+      // Standalone function: "√(9)" or replacing previous
       setCalculationHistory(functionExpression);
     }
     
     // Update LAYER 1 (Main Display) with intermediate result
     setCurrentInput(formattedResult);
     setWaitingForNewValue(true);
-  }, [isError, currentInput, clear, formatResult, lastFunctionInput, pendingOperator, getOperatorSymbol, expressionParts, accumulator]);
-  
+  }, [isError, currentInput, clear, formatResult, pendingOperator, getOperatorSymbol, expressionParts, accumulator, calculationHistory, waitingForNewValue, previousFunctionResult, addToHistory]);
+    
   const square = useCallback(() => {
     if (isError) {
       clear();
@@ -371,14 +382,21 @@ export const useCalculator = () => {
     const result = value * value;
     const formattedResult = formatResult(result);
     
-    // CRITICAL: Use currentInput (original string) to preserve exact value
-    // Use lastFunctionInput if available to preserve notation chain
-    // Example: sqr(9) → x² becomes sqr(sqr(9)), not sqr(81)
-    const innerExpression = lastFunctionInput || currentInput;
-    const functionExpression = `sqr(${innerExpression})`;
+    // CRITICAL: If there's a function expression in LAYER 2 and user has typed new number,
+    // save the previous calculation to LAYER 3 before replacing
+    if (calculationHistory && !calculationHistory.includes('=') && pendingOperator === null && !waitingForNewValue && previousFunctionResult !== null) {
+      // Example: LAYER 2 shows "sqr(5)", user typed "6", now pressing x²
+      // Save "sqr(5) = 25" to history
+      const expression = `${calculationHistory} =`;
+      addToHistory(expression, previousFunctionResult);
+    }
     
-    // Store function expression for nested operations
+    // Build the new function expression using current input (not lastFunctionInput)
+    const functionExpression = `sqr(${currentInput})`;
+    
+    // Store function expression and result for next operation
     setLastFunctionInput(functionExpression);
+    setPreviousFunctionResult(formattedResult);
     
     // Update LAYER 2 (Expression Display) with function notation
     if (pendingOperator !== null) {
@@ -389,15 +407,15 @@ export const useCalculator = () => {
         : accumulator.toString();
       setCalculationHistory(`${baseExpression} ${operatorSymbol} ${functionExpression}`);
     } else {
-      // Standalone function: "sqr(5)" or chained: "sqr(sqr(9))"
+      // Standalone function: "sqr(5)" or replacing previous: "sqr(6)"
       setCalculationHistory(functionExpression);
     }
     
     // Update LAYER 1 (Main Display) with intermediate result
     setCurrentInput(formattedResult);
     setWaitingForNewValue(true);
-  }, [isError, currentInput, clear, formatResult, lastFunctionInput, pendingOperator, getOperatorSymbol, expressionParts, accumulator]);  
-  
+  }, [isError, currentInput, clear, formatResult, pendingOperator, getOperatorSymbol, expressionParts, accumulator, calculationHistory, waitingForNewValue, previousFunctionResult, addToHistory]);
+    
   const reciprocal = useCallback(() => {
     if (isError) {
       clear();
@@ -414,14 +432,19 @@ export const useCalculator = () => {
     const result = 1 / value;
     const formattedResult = formatResult(result);
     
-    // CRITICAL: Use currentInput (original string) to preserve exact value
-    // Use lastFunctionInput if available to preserve notation chain
-    // Example: sqr(4) → 1/x becomes 1/(sqr(4)), not 1/(16)
-    const innerExpression = lastFunctionInput || currentInput;
-    const functionExpression = `1/(${innerExpression})`;
+    // CRITICAL: If there's a function expression in LAYER 2 and user has typed new number,
+    // save the previous calculation to LAYER 3 before replacing
+    if (calculationHistory && !calculationHistory.includes('=') && pendingOperator === null && !waitingForNewValue && previousFunctionResult !== null) {
+      const expression = `${calculationHistory} =`;
+      addToHistory(expression, previousFunctionResult);
+    }
     
-    // Store function expression for nested operations
+    // Build the new function expression using current input
+    const functionExpression = `1/(${currentInput})`;
+    
+    // Store function expression and result for next operation
     setLastFunctionInput(functionExpression);
+    setPreviousFunctionResult(formattedResult);
     
     // Update LAYER 2 (Expression Display) with function notation
     if (pendingOperator !== null) {
@@ -432,15 +455,15 @@ export const useCalculator = () => {
         : accumulator.toString();
       setCalculationHistory(`${baseExpression} ${operatorSymbol} ${functionExpression}`);
     } else {
-      // Standalone function: "1/(5)" or chained: "1/(sqr(4))"
+      // Standalone function: "1/(5)" or replacing previous
       setCalculationHistory(functionExpression);
     }
     
     // Update LAYER 1 (Main Display) with intermediate result
     setCurrentInput(formattedResult);
     setWaitingForNewValue(true);
-  }, [isError, currentInput, clear, formatResult, lastFunctionInput, pendingOperator, getOperatorSymbol, expressionParts, accumulator]);
-  
+  }, [isError, currentInput, clear, formatResult, pendingOperator, getOperatorSymbol, expressionParts, accumulator, calculationHistory, waitingForNewValue, previousFunctionResult, addToHistory]);
+    
   const setOperator = useCallback((operator) => {
     if (isError) {
       return;
@@ -448,6 +471,9 @@ export const useCalculator = () => {
     
     const currentValue = parseFloat(currentInput);
     const operatorSymbol = getOperatorSymbol(operator);
+    
+    // Clear previous function result when operator is pressed
+    setPreviousFunctionResult(null);
     
     // SEQUENTIAL EVALUATION: If there's a pending operation, execute it first (left-to-right)
     if (pendingOperator !== null && !waitingForNewValue) {
@@ -486,7 +512,8 @@ export const useCalculator = () => {
       setCalculationHistory(`${result} ${operatorSymbol}`);
       
       // Clear function input since we've used it
-      setLastFunctionInput(null);    } else {
+      setLastFunctionInput(null);   
+    } else {
       // First operator or after a function
       // CRITICAL: Use original string input to preserve exact value
       // Use function notation if available, otherwise use currentInput (the exact string)
@@ -503,11 +530,14 @@ export const useCalculator = () => {
     setLastOperation(operator);
     setLastOperand(null);
   }, [isError, currentInput, pendingOperator, waitingForNewValue, accumulator, expressionParts, lastFunctionInput, getOperatorSymbol, performOperation, addToHistory]);  
-  
+    
   const equals = useCallback(() => {
     if (isError) {
       return;
     }
+    
+    // Clear previous function result when equals is pressed
+    setPreviousFunctionResult(null);
     
       // Handle case: just a single number followed by equals (e.g., "5 =")
     if (pendingOperator === null && !calculationHistory.includes('=')) {
